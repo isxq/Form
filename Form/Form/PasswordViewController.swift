@@ -59,6 +59,7 @@ class PasswordViewController: UITableViewController {
     
     @objc func editingDidEnter(_ sender: Any) {
         onChange(textfield.text ?? "")
+        navigationController?.popViewController(animated: true)
     }
     
 }

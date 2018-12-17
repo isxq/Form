@@ -20,7 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window?.rootViewController = navigationController
         window?.makeKeyAndVisible()
         
-        let vc = ViewController(style: .grouped)
+        let vc = ViewController()
         
         navigationController.viewControllers = [ vc ]
         
