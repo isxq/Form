@@ -13,6 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
     var navigationController = UINavigationController()
+    let driver = HotspotDriver()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         window = UIWindow(frame: UIScreen.main.bounds)
@@ -20,9 +21,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window?.rootViewController = navigationController
         window?.makeKeyAndVisible()
         
-        let vc = ViewController()
-        
-        navigationController.viewControllers = [ vc ]
+        navigationController.viewControllers = [ driver.formViewController ]
         
         return true
     }
