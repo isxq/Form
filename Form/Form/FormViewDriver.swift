@@ -19,62 +19,105 @@ extension Hotspot {
     }
 }
 
-class HotspotDriver {
+final class TargetAction {
+    let excute: ()->Void
+    init(_ excute: @escaping ()->Void) {
+        self.excute = excute
+    }
+    
+    @objc func action(_ sender: Any) {
+        excute()
+    }
+}
+
+struct Observer {
+    var strongRefrences: [Any]
+    var update: (Hotspot) -> Void
+    
+}
+
+func hotspotForm(state: Hotspot, change: @escaping ((inout Hotspot)->Void)-> Void, pushViewController: @escaping (UIViewController) -> Void ) -> ([Section], Observer) {
+    var strongRefrences: [Any] = []
+    var updates: [(Hotspot) -> Void] = []
+    
+    let toggleCell = FormCell(style: .value1, reuseIdentifier: nil)
+    let toggle = UISwitch()
+    toggle.isOn = state.isEnabled
+    toggle.translatesAutoresizingMaskIntoConstraints = false
+    let toggleTarget = TargetAction {
+        change{$0.isEnabled = toggle.isOn}
+    }
+    strongRefrences.append(toggleTarget)
+    updates.append{ state in
+        toggle.isOn = state.isEnabled
+    }
+    toggle.addTarget(toggleTarget, action: #selector(toggleTarget.action(_:)), for: .valueChanged)
+    toggleCell.contentView.addSubview(toggle)
+    toggleCell.textLabel?.text = "Personal Hotspot"
+    toggleCell.contentView.addConstraints([
+        toggle.centerYAnchor.constraint(equalTo: toggleCell.contentView.centerYAnchor),
+        toggle.trailingAnchor.constraint(equalTo: toggleCell.contentView.layoutMarginsGuide.trailingAnchor)
+        ])
+    
+    let passwordDriver = PasswordDriver(password: state.password) { newPassword in
+        change{$0.password = newPassword}
+    }
+    
+    
+    
+    let passwordCell = FormCell(style: .value1, reuseIdentifier: nil)
+    passwordCell.shouldHighlight = true
+    passwordCell.textLabel?.text = "Password"
+    passwordCell.detailTextLabel?.text = state.password
+    passwordCell.accessoryType = .disclosureIndicator
+    passwordCell.didSelect = {
+        pushViewController(passwordDriver.formViewController)
+    }
+    
+    updates.append{ state in
+        passwordCell.detailTextLabel?.text = state.password
+    }
+    
+    let toggleSection = Section(cells: [
+        toggleCell
+        ], footerTitle: state.enableSectionTitle)
+    
+    updates.append{ state in
+        toggleSection.footerTitle = state.enableSectionTitle
+    }
+    
+    return ([
+        toggleSection,
+        Section(cells: [
+            passwordCell
+            ], footerTitle: nil)
+        ], Observer(strongRefrences: strongRefrences, update: { state in
+            updates.forEach{$0(state)}
+        }))
+}
+
+class FormDriver {
     var formViewController: FormViewController!
     var sections: [Section] = []
-    let toggle = UISwitch()
+    var observer: Observer!
     
-    init() {
-        buildSections()
+    init(initial state: Hotspot, build: (Hotspot, @escaping ((inout Hotspot)->Void)->Void, _ pushViewController: @escaping (UIViewController) -> Void) -> ([Section], Observer)) {
+        self.state = state
+        let (sections, observer) = build(state, { [unowned self] f in
+            f(&self.state)
+            }, { [unowned self] vc in
+                self.formViewController.navigationController?.pushViewController(vc, animated: true)
+        })
+        self.sections = sections
+        self.observer = observer
         formViewController = FormViewController(sections: sections, title: "Personal Hotspot Settings")
     }
     
     var state = Hotspot() {
         didSet {
-            print(state)
-            sections[0].footerTitle = state.enableSectionTitle
-            sections[1].cells[0].detailTextLabel?.text = state.password
+            observer.update(state)
             formViewController.reloadSectionFooters()
         }
-    }
-    
-    func buildSections() {
-        let toggleCell = FormCell(style: .value1, reuseIdentifier: nil)
-        toggleCell.contentView.addSubview(toggle)
-        toggleCell.textLabel?.text = "Personal Hotspot"
-        toggle.translatesAutoresizingMaskIntoConstraints = false
-        toggleCell.contentView.addConstraints([
-            toggle.centerYAnchor.constraint(equalTo: toggleCell.contentView.centerYAnchor),
-            toggle.trailingAnchor.constraint(equalTo: toggleCell.contentView.layoutMarginsGuide.trailingAnchor)
-            ])
-        toggle.addTarget(self, action: #selector(toggleChanged(_:)), for: .valueChanged)
-        toggle.isOn = state.isEnabled
-        
-        let passwordDriver = PasswordDriver(password: state.password) { [unowned self] in
-            self.state.password = $0
-        }
-        
-        let passwordCell = FormCell(style: .value1, reuseIdentifier: nil)
-        passwordCell.shouldHighlight = true
-        passwordCell.textLabel?.text = "Password"
-        passwordCell.detailTextLabel?.text = state.password
-        passwordCell.accessoryType = .disclosureIndicator
-        passwordCell.didSelect = { [unowned self] in
-            self.formViewController.navigationController?.pushViewController(passwordDriver.formViewController, animated: true)
-        }
-        
-        sections = [
-            Section(cells: [
-                toggleCell
-                ], footerTitle: state.enableSectionTitle),
-            Section(cells: [
-                passwordCell
-                ], footerTitle: nil)
-        ]
-    }
-    
-    @objc func toggleChanged(_ sender: Any) {
-        state.isEnabled = toggle.isOn
     }
 }
 
