@@ -19,33 +19,17 @@ extension Hotspot {
     }
 }
 
-final class TargetAction {
-    let excute: ()->Void
-    init(_ excute: @escaping ()->Void) {
-        self.excute = excute
-    }
-    
-    @objc func action(_ sender: Any) {
-        excute()
-    }
-}
 
-struct Observer {
-    var strongRefrences: [Any]
-    var update: (Hotspot) -> Void
-    
-}
-
-func hotspotForm(state: Hotspot, change: @escaping ((inout Hotspot)->Void)-> Void, pushViewController: @escaping (UIViewController) -> Void ) -> ([Section], Observer) {
+func hotspotForm(context: RenderingContext<Hotspot>) -> ([Section], Observer<Hotspot>) {
     var strongRefrences: [Any] = []
     var updates: [(Hotspot) -> Void] = []
     
     let toggleCell = FormCell(style: .value1, reuseIdentifier: nil)
     let toggle = UISwitch()
-    toggle.isOn = state.isEnabled
     toggle.translatesAutoresizingMaskIntoConstraints = false
+    
     let toggleTarget = TargetAction {
-        change{$0.isEnabled = toggle.isOn}
+        context.change{$0.isEnabled = toggle.isOn}
     }
     strongRefrences.append(toggleTarget)
     updates.append{ state in
@@ -59,19 +43,16 @@ func hotspotForm(state: Hotspot, change: @escaping ((inout Hotspot)->Void)-> Voi
         toggle.trailingAnchor.constraint(equalTo: toggleCell.contentView.layoutMarginsGuide.trailingAnchor)
         ])
     
-    let passwordDriver = PasswordDriver(password: state.password) { newPassword in
-        change{$0.password = newPassword}
-    }
-    
-    
+    //    let passwordDriver = FormDriver(initial: context.state, build: buildPasswordForm)
+    let (sections, observer) = buildPasswordForm(context: context)
+    let passwordForm = FormViewController(sections: sections, title: "Personal Hotspot Driver")
     
     let passwordCell = FormCell(style: .value1, reuseIdentifier: nil)
     passwordCell.shouldHighlight = true
     passwordCell.textLabel?.text = "Password"
-    passwordCell.detailTextLabel?.text = state.password
     passwordCell.accessoryType = .disclosureIndicator
     passwordCell.didSelect = {
-        pushViewController(passwordDriver.formViewController)
+        context.pushViewController(passwordForm)
     }
     
     updates.append{ state in
@@ -80,7 +61,7 @@ func hotspotForm(state: Hotspot, change: @escaping ((inout Hotspot)->Void)-> Voi
     
     let toggleSection = Section(cells: [
         toggleCell
-        ], footerTitle: state.enableSectionTitle)
+        ], footerTitle: context.state.enableSectionTitle)
     
     updates.append{ state in
         toggleSection.footerTitle = state.enableSectionTitle
@@ -91,76 +72,41 @@ func hotspotForm(state: Hotspot, change: @escaping ((inout Hotspot)->Void)-> Voi
         Section(cells: [
             passwordCell
             ], footerTitle: nil)
-        ], Observer(strongRefrences: strongRefrences, update: { state in
+        ], Observer(strongRefrences: (strongRefrences + observer.strongRefrences), update: { state in
+            observer.update(state)
             updates.forEach{$0(state)}
         }))
 }
 
-class FormDriver {
-    var formViewController: FormViewController!
-    var sections: [Section] = []
-    var observer: Observer!
-    
-    init(initial state: Hotspot, build: (Hotspot, @escaping ((inout Hotspot)->Void)->Void, _ pushViewController: @escaping (UIViewController) -> Void) -> ([Section], Observer)) {
-        self.state = state
-        let (sections, observer) = build(state, { [unowned self] f in
-            f(&self.state)
-            }, { [unowned self] vc in
-                self.formViewController.navigationController?.pushViewController(vc, animated: true)
-        })
-        self.sections = sections
-        self.observer = observer
-        formViewController = FormViewController(sections: sections, title: "Personal Hotspot Settings")
+func buildPasswordForm(context: RenderingContext<Hotspot>) -> ([Section], Observer<Hotspot>){
+    let textfield = UITextField()
+    let update: (Hotspot)->Void = { state in
+        textfield.text = state.password
     }
     
-    var state = Hotspot() {
-        didSet {
-            observer.update(state)
-            formViewController.reloadSectionFooters()
-        }
+    let ta1 = TargetAction {
+        context.change{ $0.password = textfield.text ?? "" }
     }
+    
+    let ta2 = TargetAction {
+        context.change{ $0.password = textfield.text ?? "" }
+        context.popViewController()
+    }
+    
+    textfield.addTarget(ta1, action: #selector(ta1.action(_:)), for: .editingDidEnd)
+    textfield.addTarget(ta2, action: #selector(ta2.action(_:)), for: .editingDidEndOnExit)
+    
+    let cell = FormCell(style: .value1, reuseIdentifier: nil)
+    cell.textLabel?.text = "Password"
+    cell.contentView.addSubview(textfield)
+    textfield.translatesAutoresizingMaskIntoConstraints = false
+    cell.contentView.addConstraints([
+        textfield.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+        textfield.trailingAnchor.constraint(equalTo: cell.contentView.layoutMarginsGuide.trailingAnchor),
+        textfield.leadingAnchor.constraint(equalTo: cell.textLabel!.trailingAnchor, constant: 20)
+        ])
+    
+    return ([Section(cells: [cell], footerTitle: nil)],
+            Observer(strongRefrences:[ta1, ta2], update: update))
 }
 
-class PasswordDriver {
-    
-    let textfield = UITextField()
-    var onChange: (String)-> Void
-    var formViewController: FormViewController!
-    var sections: [Section] = []
-    
-    init(password: String, onChange: @escaping (String)-> Void) {
-        self.onChange = onChange
-        buildSections()
-        self.formViewController = FormViewController(sections: sections, title: "Hotspot Password", firstResponder: textfield)
-        textfield.text = password
-    }
-    
-    func buildSections() {
-        let cell = FormCell(style: .value1, reuseIdentifier: nil)
-        cell.textLabel?.text = "Password"
-        cell.contentView.addSubview(textfield)
-        textfield.translatesAutoresizingMaskIntoConstraints = false
-        textfield.addTarget(self, action: #selector(editingEnded(_:)), for: .editingDidEnd)
-        textfield.addTarget(self, action: #selector(editingDidEnter(_:)), for: .editingDidEndOnExit)
-        cell.contentView.addConstraints([
-            textfield.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
-            textfield.trailingAnchor.constraint(equalTo: cell.contentView.layoutMarginsGuide.trailingAnchor),
-            textfield.leadingAnchor.constraint(equalTo: cell.textLabel!.trailingAnchor, constant: 20)
-            ])
-        
-        sections = [
-            Section(cells: [cell], footerTitle: nil)
-        ]
-    }
-    
-    
-    @objc func editingEnded(_ sender: Any) {
-        onChange(textfield.text ?? "")
-    }
-    
-    @objc func editingDidEnter(_ sender: Any) {
-        onChange(textfield.text ?? "")
-        formViewController.navigationController?.popViewController(animated: true)
-    }
-    
-}

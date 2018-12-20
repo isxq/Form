@@ -8,6 +8,59 @@
 
 import UIKit
 
+final class TargetAction {
+    let excute: ()->Void
+    init(_ excute: @escaping ()->Void) {
+        self.excute = excute
+    }
+    
+    @objc func action(_ sender: Any) {
+        excute()
+    }
+}
+
+struct Observer<State> {
+    var strongRefrences: [Any]
+    var update: (State) -> Void
+    
+}
+
+struct RenderingContext<State> {
+    let state: State
+    let change: ((inout State)->Void)-> Void
+    let pushViewController: (UIViewController) -> Void
+    let popViewController: () -> Void
+}
+
+class FormDriver<State> {
+    var formViewController: FormViewController!
+    var sections: [Section] = []
+    var observer: Observer<State>!
+    
+    init(initial state: State, build: (RenderingContext<State>) -> ([Section], Observer<State>)) {
+        self.state = state
+        let context = RenderingContext(state: state, change: { [unowned self] f in
+            f(&self.state)
+            }, pushViewController: { [unowned self] vc in
+                self.formViewController.navigationController?.pushViewController(vc, animated: true)
+            }, popViewController: { [unowned self] in
+                self.formViewController.navigationController?.popViewController(animated: true)
+        })
+        let (sections, observer) = build(context)
+        self.sections = sections
+        self.observer = observer
+        observer.update(state)
+        formViewController = FormViewController(sections: sections, title: "Personal Hotspot Settings")
+    }
+    
+    var state : State {
+        didSet {
+            observer.update(state)
+            formViewController.reloadSectionFooters()
+        }
+    }
+}
+
 class Section {
     let cells: [FormCell]
     var footerTitle: String?
