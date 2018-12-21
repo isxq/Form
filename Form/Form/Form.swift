@@ -19,7 +19,8 @@ final class TargetAction {
     }
 }
 
-struct Observer<State> {
+struct RenderElement<Element, State> {
+    var element: Element
     var strongRefrences: [Any]
     var update: (State) -> Void
     
@@ -34,10 +35,9 @@ struct RenderingContext<State> {
 
 class FormDriver<State> {
     var formViewController: FormViewController!
-    var sections: [Section] = []
-    var observer: Observer<State>!
+    var render: RenderElement<[Section], State>!
     
-    init(initial state: State, build: (RenderingContext<State>) -> ([Section], Observer<State>)) {
+    init(initial state: State, build: (RenderingContext<State>) -> RenderElement<[Section], State>) {
         self.state = state
         let context = RenderingContext(state: state, change: { [unowned self] f in
             f(&self.state)
@@ -46,16 +46,14 @@ class FormDriver<State> {
             }, popViewController: { [unowned self] in
                 self.formViewController.navigationController?.popViewController(animated: true)
         })
-        let (sections, observer) = build(context)
-        self.sections = sections
-        self.observer = observer
-        observer.update(state)
-        formViewController = FormViewController(sections: sections, title: "Personal Hotspot Settings")
+        self.render = build(context)
+        render.update(state)
+        formViewController = FormViewController(sections: render.element, title: "Personal Hotspot Settings")
     }
     
     var state : State {
         didSet {
-            observer.update(state)
+            render.update(state)
             formViewController.reloadSectionFooters()
         }
     }
