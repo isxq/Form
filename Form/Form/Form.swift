@@ -19,7 +19,7 @@ final class TargetAction {
     }
 }
 
-struct RenderElement<Element, State> {
+struct RenderedElement<Element, State> {
     var element: Element
     var strongRefrences: [Any]
     var update: (State) -> Void
@@ -35,9 +35,9 @@ struct RenderingContext<State> {
 
 class FormDriver<State> {
     var formViewController: FormViewController!
-    var render: RenderElement<[Section], State>!
+    var render: RenderedElement<[Section], State>!
     
-    init(initial state: State, build: (RenderingContext<State>) -> RenderElement<[Section], State>) {
+    init(initial state: State, build: (RenderingContext<State>) -> RenderedElement<[Section], State>) {
         self.state = state
         let context = RenderingContext(state: state, change: { [unowned self] f in
             f(&self.state)
@@ -138,4 +138,64 @@ class FormViewController: UITableViewController {
         return sections[indexPath.section].cells[indexPath.row]
     }
     
+}
+
+func uiswitich<State>(context: RenderingContext<State>, keyPath: WritableKeyPath<State, Bool>) -> RenderedElement<UIView, State> {
+    
+    let toggle = UISwitch()
+    toggle.translatesAutoresizingMaskIntoConstraints = false
+    let toggleTarget = TargetAction {
+        context.change{$0[keyPath: keyPath] = toggle.isOn}
+    }
+    toggle.addTarget(toggleTarget, action: #selector(toggleTarget.action(_:)), for: .valueChanged)
+    return RenderedElement(element: toggle, strongRefrences: [toggleTarget], update: { state in
+        toggle.isOn = state[keyPath: keyPath]
+    })
+}
+
+
+func textField<State>(context: RenderingContext<State>, keyPath: WritableKeyPath<State, String>) -> RenderedElement<UIView, State> {
+    
+    let textfield = UITextField()
+    textfield.translatesAutoresizingMaskIntoConstraints = false
+    
+    let didEnd = TargetAction {
+        context.change{ $0[keyPath: keyPath] = textfield.text ?? "" }
+    }
+    
+    let didExit = TargetAction {
+        context.change{ $0[keyPath: keyPath] = textfield.text ?? "" }
+        context.popViewController()
+    }
+    
+    textfield.addTarget(didEnd, action: #selector(didEnd.action(_:)), for: .editingDidEnd)
+    textfield.addTarget(didExit, action: #selector(didExit.action(_:)), for: .editingDidEndOnExit)
+    return RenderedElement(element: textfield, strongRefrences:[didEnd, didExit], update: { state in
+        textfield.text = state[keyPath: keyPath]
+    })
+}
+
+func controlCell<State>(title: String, control: RenderedElement<UIView, State>, leftAligned: Bool = false)-> RenderedElement<FormCell, State> {
+    let cell = FormCell(style: .value1, reuseIdentifier: nil)
+    cell.contentView.addSubview(control.element)
+    cell.textLabel?.text = title
+    cell.contentView.addConstraints([
+        control.element.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+        control.element.trailingAnchor.constraint(equalTo: cell.contentView.layoutMarginsGuide.trailingAnchor)
+        ])
+    if leftAligned {
+        cell.contentView.addConstraint( control.element.leadingAnchor.constraint(equalTo: cell.textLabel!.trailingAnchor, constant: 20))
+    }
+    return RenderedElement(element: cell, strongRefrences: control.strongRefrences, update: control.update)
+}
+
+func detailTextCell<State>(title: String, keyPath: KeyPath<State, String>, didSelect: @escaping () -> ()) -> RenderedElement<FormCell, State> {
+    let cell = FormCell(style: .value1, reuseIdentifier: nil)
+    cell.didSelect = didSelect
+    cell.textLabel?.text = title
+    cell.accessoryType = .disclosureIndicator
+    cell.shouldHighlight = true
+    return RenderedElement(element: cell, strongRefrences: [], update: { state in
+        cell.detailTextLabel?.text = state[keyPath: keyPath]
+    })
 }
