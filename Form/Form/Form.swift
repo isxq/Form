@@ -264,3 +264,25 @@ func sections<State>(_ sections: [RenderedSection<State>]) -> Form<State> {
         })
     }
 }
+
+func nestedTextField<State>(title: String, keyPath: WritableKeyPath<State, String>) -> Element<FormCell, State> {
+    let passwordForm: Form<State> =
+        sections([section([
+            controlCell(title: title, control: textField(keyPath: keyPath), leftAligned: true)
+            ])])
+    return detailTextCell(title: title, keyPath: keyPath, form: passwordForm)
+}
+
+func bind<State, NestedState>(form: @escaping Form<NestedState>, to keyPath: WritableKeyPath<State, NestedState>) -> Form<State> {
+    return { context in
+        let nestedContext = RenderingContext(state: context.state[keyPath: keyPath], change: { nestedChange in
+            context.change { state in
+                nestedChange(&state[keyPath: keyPath])
+            }
+        }, pushViewController: context.pushViewController, popViewController: context.popViewController)
+        let sections = form(nestedContext)
+        return RenderedElement(element: sections.element, strongRefrences: sections.strongRefrences, update: { state in
+            sections.update(state[keyPath: keyPath])
+        })
+    }
+}
