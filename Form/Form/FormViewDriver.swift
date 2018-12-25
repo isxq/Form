@@ -8,6 +8,8 @@
 
 import UIKit
 
+import UIKit
+
 enum ShowPreview {
     case alway
     case never
@@ -68,11 +70,12 @@ let hotspotForm: Form<Hotspot> =
             ], footer: \.enableSectionTitle),
         section([
             detailTextCell(title: "Notification", keyPath: \.showPreview.text, form: showPreviewForm)
-            ]),
+            ], isVisble: \.isEnabled),
         section([
             nestedTextField(title: "Password", keyPath: \.password),
             nestedTextField(title: "NetworkName", keyPath: \.networkName)
-            ])
+            ], isVisble: \.isEnabled)
         ])
+
 
 

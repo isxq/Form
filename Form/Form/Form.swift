@@ -67,9 +67,11 @@ class Section: Equatable {
     
     let cells: [FormCell]
     var footerTitle: String?
-    init(cells: [FormCell], footerTitle: String?) {
+    var isVisble: Bool
+    init(cells: [FormCell], footerTitle: String?, isVisble: Bool) {
         self.cells = cells
         self.footerTitle = footerTitle
+        self.isVisble = isVisble
     }
     
     static func == (lhs: Section, rhs: Section) -> Bool {
@@ -85,12 +87,17 @@ class FormCell: UITableViewCell {
 class FormViewController: UITableViewController {
     
     var sections: [Section] = []
+    var previouslySection: [Section] = []
+    var visbleSections: [Section] {
+        return sections.filter{ $0.isVisble == true }
+    }
     var firstResponder: UIResponder?
     
     init(sections: [Section], title: String, firstResponder: UIResponder? = nil) {
         self.sections = sections
         self.firstResponder = firstResponder
         super.init(style: .grouped)
+        previouslySection = visbleSections
         navigationItem.title = title
     }
     
@@ -106,21 +113,32 @@ class FormViewController: UITableViewController {
     func reloadSections() {
         tableView.beginUpdates()
         for index in sections.indices {
+            let section = sections[index]
+            let newIndex = visbleSections.index(of: section)
+            let oldIndex = previouslySection.index(of: section)
+            switch (newIndex, oldIndex) {
+            case (nil, nil), (.some, .some): break
+            case let (newIndex?, nil):
+                tableView.insertSections([newIndex], with: .fade)
+            case let (nil, oldIndex?):
+                tableView.deleteSections([oldIndex], with: .fade)
+            }
             let footerView = tableView.footerView(forSection: index)
             footerView?.textLabel?.text = tableView(tableView, titleForFooterInSection: index)
             footerView?.setNeedsLayout()
         }
         tableView.endUpdates()
+        previouslySection = visbleSections
     }
     
     
     
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return sections.count
+        return visbleSections.count
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return sections[section].cells.count
+        return visbleSections[section].cells.count
     }
     
     
@@ -134,7 +152,7 @@ class FormViewController: UITableViewController {
     }
     
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        return sections[section].footerTitle
+        return visbleSections[section].footerTitle
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -142,7 +160,7 @@ class FormViewController: UITableViewController {
     }
     
     func cell(for indexPath: IndexPath) -> FormCell {
-        return sections[indexPath.section].cells[indexPath.row]
+        return visbleSections[indexPath.section].cells[indexPath.row]
     }
     
 }
@@ -236,10 +254,10 @@ func detailTextCell<State>(title: String, keyPath: KeyPath<State, String>, form:
     }
 }
 
-func section<State>(_ cells: [Element<FormCell, State>], footer keyPath: KeyPath<State, String?>? = nil) -> RenderedSection<State> {
+func section<State>(_ cells: [Element<FormCell, State>], footer keyPath: KeyPath<State, String?>? = nil, isVisble: KeyPath<State, Bool>? = nil) -> RenderedSection<State> {
     return { context in
         let renderedCells = cells.map{ $0(context) }
-        let section = Section(cells: renderedCells.map{$0.element}, footerTitle: nil)
+        let section = Section(cells: renderedCells.map{$0.element}, footerTitle: nil, isVisble: true)
         return RenderedElement(
             element: section,
             strongRefrences: renderedCells.flatMap{$0.strongRefrences},
@@ -247,6 +265,9 @@ func section<State>(_ cells: [Element<FormCell, State>], footer keyPath: KeyPath
                 renderedCells.forEach{$0.update(state)}
                 if let kp = keyPath {
                     section.footerTitle = state[keyPath: kp]
+                }
+                if let iv = isVisble {
+                    section.isVisble = state[keyPath: iv]
                 }
         })
     }
